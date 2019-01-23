@@ -36,11 +36,11 @@ public class ScanJob
     private void InternalScan()
     {
         // create a barcode reader instance
-        //IBarcodeReader reader = new BarcodeReader();
-        //reader.Options.TryHarder = true;
+        IBarcodeReader reader = new BarcodeReader();
+        reader.Options.TryHarder = true;
 
         //detect and decode the barcode inside the Color32 array
-        //ScanResult = reader.Decode(barcodeBitmap, textureWidth, textureHeight);
+        ScanResult = reader.Decode(barcodeBitmap, textureWidth, textureHeight);
 
         // do something with the result
         if (ScanResult != null)
@@ -49,9 +49,7 @@ public class ScanJob
             Debug.Log(ScanResult.Text);
         }
 
-        Debug.Log("finshed scan job");
         IsFinished = true;
-
         barcodeBitmap = null;
     }
 }
