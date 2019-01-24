@@ -1,31 +1,30 @@
-﻿
-using System;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using UnityEngine;
 using ZXing;
 
 public class ScanJob
 {
-    private Color32[] barcodeBitmap;
     private readonly int textureWidth;
     private readonly int textureHeight;
+    private byte[] imageBufferArray;
 
-    public Result ScanResult { get; private set; }
-    public bool IsFinished { get; private set; }
-    public bool IsDataReady { get { return ScanResult != null; } }
+    //dont know how unity/uwp handles async stuff
+    //in case they will execute it in a different thread, 
+    //we mark this as volatile so the main thread will see the current data
+    private volatile bool _isFinished;
+    private volatile Result _scanResult;
 
-    public ScanJob(Color32[] barcodeBitmap, int textureWidth, int textureHeight)
+    public Result ScanResult { get { return _scanResult; } }
+    public bool IsFinished { get { return _isFinished; } }
+    public bool IsDataReady { get { return _scanResult != null; } }
+
+    public ScanJob(byte[] imageBufferArray, int textureWidth, int textureHeight)
     {
-        if (barcodeBitmap == null)
-        {
-            throw new ArgumentNullException("texture cant be null");
-        }
-
-        this.barcodeBitmap = barcodeBitmap;
+        this.imageBufferArray = imageBufferArray;
         this.textureWidth = textureWidth;
         this.textureHeight = textureHeight;
 
-        IsFinished = false;
+        _isFinished = false;
     }
 
     public async void ScanAsync()
@@ -40,16 +39,10 @@ public class ScanJob
         reader.Options.TryHarder = true;
 
         //detect and decode the barcode inside the Color32 array
-        ScanResult = reader.Decode(barcodeBitmap, textureWidth, textureHeight);
+        _scanResult = reader.Decode(imageBufferArray, textureWidth, textureHeight, RGBLuminanceSource.BitmapFormat.BGR32);
 
-        // do something with the result
-        if (ScanResult != null)
-        {
-            Debug.Log(ScanResult.BarcodeFormat.ToString());
-            Debug.Log(ScanResult.Text);
-        }
-
-        IsFinished = true;
-        barcodeBitmap = null;
+        _isFinished = true;
+        //cleanup as fast as possible to let the GC do its job
+        imageBufferArray = null;
     }
 }

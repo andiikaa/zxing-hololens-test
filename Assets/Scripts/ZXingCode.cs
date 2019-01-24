@@ -1,69 +1,87 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.XR.WSA.WebCam;
 
 
-public class ZXingCode : MonoBehaviour {
+public class ZXingCode : MonoBehaviour
+{
 
     PhotoCapture photoCaptureObject = null;
     Resolution cameraResolution;
 
-    //creating 2D Texture eats memory, so we use only one and update the content after each PhotoCapture
-    Texture2D targetTexture;
-
     ScanJob scanJob;
+
+    List<byte> imageBuffer = new List<byte>();
 
     bool captureStarted = false;
     bool firstScan = true;
 
     // Use this for initialization
-    void Start () {
+    void Start()
+    {
         Debug.Log("Starting the scanning script");
 
         //the resolution is recommended for hololens by microsoft
         cameraResolution = new Resolution() { width = 1280, height = 720 };
-
-        targetTexture = new Texture2D(cameraResolution.width, cameraResolution.height, TextureFormat.BGRA32, false);
         Debug.LogFormat("Take picture with w:{0} x h:{1}", cameraResolution.width, cameraResolution.height);
     }
 
-	// Update is called once per frame
-	void Update ()
+    // Update is called once per frame
+    void Update()
     {
-        //there can only be one active PhotoCapture
-        if (!captureStarted)
-        {
-            captureStarted = true;
-            StartInit();
-        }
-
-        //- firstScan indicates, if an image was already captured
-        //- there is one ScanJob which uses the captured image and tries to decode the barcode
-        //- we do this async or the framerate will drop to 2-3 fps :(
-        if (!firstScan)
-        {
-            if(scanJob == null || scanJob.IsFinished)
-            {
-                if (scanJob != null && scanJob.IsDataReady)
-                {
-                    //do whatever you want with the data
-                    Debug.Log("#### data is ready ####");
-                }
-
-
-                lock (targetTexture)
-                {
-                    scanJob = new ScanJob(targetTexture.GetPixels32(), cameraResolution.width, cameraResolution.height);
-                }
-
-                scanJob.ScanAsync();
-            }
-        }
+        StartCapture();
+        HandlePresentImage();
     }
 
-    void StartInit()
+    void OnDestroy() { Debug.Log("destroying the qrcode scanning object"); }
+    void OnDisable() { Debug.Log("disabling the qrcode scanning object"); }
+
+    //- firstScan indicates, if an image was already captured
+    //- there is one ScanJob which uses the captured image and tries to decode the barcode
+    //- we do this async or the framerate will drop to 2-3 fps :(
+    private void HandlePresentImage()
     {
+        if (firstScan) return;
+        if (scanJob != null && !scanJob.IsFinished) return;
+
+        HandleExistingQRCode();
+        TryToReadQRCode();
+    }
+
+    private void HandleExistingQRCode()
+    {
+        if (scanJob == null || !scanJob.IsDataReady) return;
+
+        //do whatever you want with the data
+        Debug.Log("#### data is ready ####");
+        Debug.Log(scanJob.ScanResult.BarcodeFormat.ToString());
+        Debug.Log(scanJob.ScanResult.Text);
+    }
+
+    //tries to read the qrcode async
+    private void TryToReadQRCode()
+    {
+        lock (imageBuffer)
+        {
+            byte[] tmpBuffer = new byte[imageBuffer.Count];
+            imageBuffer.CopyTo(tmpBuffer);
+            scanJob = new ScanJob(tmpBuffer, cameraResolution.width, cameraResolution.height);
+        }
+
+        scanJob.ScanAsync();
+    }
+
+    #region photo capture
+
+    private void StartCapture()
+    {
+        //there can only be one active PhotoCapture
+        if (captureStarted) return;
+        captureStarted = true;
+
         // Create a PhotoCapture object
-        PhotoCapture.CreateAsync(false, delegate (PhotoCapture captureObject) {
+        PhotoCapture.CreateAsync(false, delegate (PhotoCapture captureObject)
+        {
             photoCaptureObject = captureObject;
             CameraParameters cameraParameters = new CameraParameters();
             cameraParameters.hologramOpacity = 0.0f;
@@ -72,19 +90,23 @@ public class ZXingCode : MonoBehaviour {
             cameraParameters.pixelFormat = CapturePixelFormat.BGRA32;
 
             // Activate the camera
-            photoCaptureObject.StartPhotoModeAsync(cameraParameters, delegate (PhotoCapture.PhotoCaptureResult result) {
+            photoCaptureObject.StartPhotoModeAsync(cameraParameters, delegate (PhotoCapture.PhotoCaptureResult result)
+            {
                 // Take a picture
                 photoCaptureObject.TakePhotoAsync(OnCapturedPhotoToMemory);
             });
         });
     }
 
-    void OnCapturedPhotoToMemory(PhotoCapture.PhotoCaptureResult result, PhotoCaptureFrame photoCaptureFrame)
+    private void OnCapturedPhotoToMemory(PhotoCapture.PhotoCaptureResult result, PhotoCaptureFrame photoCaptureFrame)
     {
         // Copy the raw image data into the target texture
-        lock(targetTexture)
+        lock (imageBuffer)
         {
-            photoCaptureFrame.UploadImageDataToTexture(targetTexture);
+            imageBuffer.Clear();
+            photoCaptureFrame.CopyRawImageDataIntoBuffer(imageBuffer);
+            //IMPORTANT: Dispose the capture frame, or the app will crash after a while with access violation 
+            photoCaptureFrame.Dispose();
             firstScan = false;
         }
 
@@ -92,11 +114,13 @@ public class ZXingCode : MonoBehaviour {
         photoCaptureObject.StopPhotoModeAsync(OnStoppedPhotoMode);
     }
 
-    void OnStoppedPhotoMode(PhotoCapture.PhotoCaptureResult result)
+    private void OnStoppedPhotoMode(PhotoCapture.PhotoCaptureResult result)
     {
         // Shutdown the photo capture resource
         photoCaptureObject.Dispose();
         photoCaptureObject = null;
         captureStarted = false;
     }
+
+    #endregion
 }
