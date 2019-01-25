@@ -9,6 +9,8 @@ public class ZXingCode : MonoBehaviour
     PhotoCapture photoCaptureObject = null;
     Resolution cameraResolution;
 
+    TextMesh text;
+
     ScanJob scanJob;
 
     List<byte> imageBuffer = new List<byte>();
@@ -20,6 +22,8 @@ public class ZXingCode : MonoBehaviour
     void Start()
     {
         Debug.Log("Starting the scanning script");
+
+        text = gameObject.transform.Find("AppHint").GetComponent<TextMesh>();
 
         //the resolution is recommended for hololens by microsoft
         cameraResolution = new Resolution() { width = 1280, height = 720 };
@@ -55,7 +59,9 @@ public class ZXingCode : MonoBehaviour
         //do whatever you want with the data
         Debug.Log("#### data is ready ####");
         Debug.Log(scanJob.ScanResult.BarcodeFormat.ToString());
-        Debug.Log(scanJob.ScanResult.Text);
+        string tmpString = scanJob.ScanResult.Text;
+        Debug.Log(tmpString);
+        if (!string.IsNullOrEmpty(tmpString)) text.text = "QR: " + tmpString;
     }
 
     //tries to read the qrcode async
